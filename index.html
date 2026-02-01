@@ -1,0 +1,769 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Disaster Response — Interactive 2D Flow</title>
+  <style>
+    :root {
+      --bg: #0b1320;
+      --bg2: #131f33;
+      --panel: #1a2b45;
+      --line: #2a3f5e;
+      --ink: #f6f3ee;
+      --muted: #b5c4d6;
+      --accent: #ffb703;
+      --danger: #ff4d6d;
+      --teal: #2ec4b6;
+      --lime: #9ef01a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: "Trebuchet MS", "Verdana", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 700px at 10% -15%, #21314b 0%, var(--bg) 55%);
+    }
+
+    .wrap {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    header {
+      padding: 18px 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--line);
+      background: linear-gradient(180deg, #1a2b45 0%, #101a2b 100%);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    header .badge {
+      background: var(--accent);
+      color: #1b1b1b;
+      font-weight: 800;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 18px;
+      padding: 18px;
+    }
+
+    .canvas {
+      position: relative;
+      min-height: 440px;
+      background: linear-gradient(180deg, var(--bg2), #0e1828 70%);
+      border: 3px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 3px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .steps {
+      display: grid;
+      gap: 10px;
+    }
+    .step {
+      border: 2px dashed var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .step.active {
+      border-color: var(--accent);
+      color: var(--ink);
+      background: rgba(255, 183, 3, 0.08);
+    }
+
+    .controls {
+      padding: 16px 26px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border-top: 2px solid var(--line);
+      background: #0f1a2b;
+    }
+    button {
+      background: var(--accent);
+      color: #1b1b1b;
+      border: 0;
+      padding: 10px 16px;
+      font-weight: 800;
+      border-radius: 10px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--ink);
+      border: 2px solid var(--line);
+    }
+
+    .scene-title {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(0,0,0,0.35);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .map {
+      position: absolute;
+      inset: 0;
+    }
+
+    .city {
+      position: absolute;
+      left: 34px;
+      right: 34px;
+      top: 46px;
+      bottom: 46px;
+      background: #16263b;
+      border: 2px solid #223755;
+      border-radius: 14px;
+    }
+
+    .grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(#223755 1px, transparent 1px),
+        linear-gradient(90deg, #223755 1px, transparent 1px);
+      background-size: 36px 36px;
+      opacity: 0.35;
+    }
+
+    .incident {
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      background: var(--danger);
+      border: 3px solid #ff9aa2;
+      border-radius: 50%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 6px rgba(255, 77, 109, 0.35);
+    }
+    .incident:after {
+      content: "";
+      position: absolute;
+      inset: -18px;
+      border: 2px dashed rgba(255, 77, 109, 0.55);
+      border-radius: 50%;
+    }
+
+    .radius {
+      position: absolute;
+      width: 360px;
+      height: 360px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px dashed rgba(46, 196, 182, 0.6);
+      border-radius: 50%;
+      box-shadow: 0 0 0 8px rgba(46, 196, 182, 0.08);
+      display: none;
+    }
+    .radius.active { display: block; }
+
+    .station {
+      position: absolute;
+      width: 40px;
+      height: 34px;
+      background: #e0e1dd;
+      border: 3px solid #3a4a64;
+      border-radius: 8px;
+    }
+    .station span {
+      position: absolute;
+      font-size: 10px;
+      font-weight: 700;
+      color: #1b1b1b;
+      background: var(--accent);
+      padding: 2px 4px;
+      border-radius: 6px;
+      top: -12px;
+      left: -6px;
+    }
+    .station.chief { left: 44%; top: 34%; border-color: var(--accent); }
+    .station.s2 { left: 34%; top: 56%; }
+    .station.s3 { left: 64%; top: 22%; }
+    .station.chief.active { box-shadow: 0 0 0 6px rgba(255, 183, 3, 0.25); }
+    .station.in-radius { border-color: var(--lime); box-shadow: 0 0 0 6px rgba(158, 240, 26, 0.2); }
+
+    .people {
+      position: absolute;
+      width: 8px;
+      height: 20px;
+      background: #ffd166;
+      border-radius: 4px;
+      box-shadow: 0 0 0 2px #b07b00;
+    }
+    .people:before {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      left: -2px;
+      top: -12px;
+      background: #ffd166;
+      border: 2px solid #b07b00;
+      border-radius: 50%;
+    }
+    .people:after {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 6px;
+      left: -5px;
+      top: 5px;
+      background: #ffd166;
+      border: 2px solid #b07b00;
+      border-top: 0;
+      border-radius: 6px;
+    }
+    .people.p1 { left: 58%; top: 42%; }
+    .people.p2 { left: 64%; top: 54%; }
+    .people.p3 { left: 44%; top: 58%; }
+    .people.p4 { left: 52%; top: 12%; }
+
+    .send-line {
+      position: absolute;
+      height: 0;
+      border-top: 3px dashed rgba(255, 255, 255, 0.6);
+      display: none;
+      transform-origin: 0 50%;
+    }
+    .send-line.active { display: block; }
+
+    .route-line {
+      position: absolute;
+      height: 0;
+      border-top: 3px dotted var(--danger);
+      display: none;
+      transform-origin: 0 50%;
+    }
+    .route-line.active { display: block; }
+    .route-line.vert {
+      width: 0;
+      height: 60px;
+      border-top: 0;
+      border-left: 3px dotted var(--danger);
+      transform: none;
+    }
+
+    .ambulance {
+      position: absolute;
+      width: 34px;
+      height: 18px;
+      background: #ffffff;
+      border: 3px solid #f4b66b;
+      border-radius: 6px;
+      display: none;
+      color: #d32f2f;
+      font-weight: 800;
+      font-size: 12px;
+      line-height: 12px;
+      text-align: center;
+    }
+    .ambulance:before, .ambulance:after {
+      content: "";
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      background: #1b1b1b;
+      border-radius: 50%;
+      bottom: -6px;
+    }
+    .ambulance:before { left: 4px; }
+    .ambulance:after { right: 4px; }
+    .ambulance.active { display: block; }
+
+    .ai {
+      position: absolute;
+      right: 26px;
+      top: 56%;
+      width: 120px;
+      height: 120px;
+      background: #1b2a44;
+      border: 3px solid var(--teal);
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 12px;
+      text-align: center;
+      padding: 10px;
+      color: var(--teal);
+      transform: translateY(-50%);
+    }
+
+    .filter {
+      position: absolute;
+      right: 26px;
+      top: calc(56% - 108px);
+      background: rgba(46, 196, 182, 0.12);
+      color: var(--teal);
+      border: 2px solid rgba(46, 196, 182, 0.5);
+      padding: 6px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      display: none;
+    }
+    .filter.active { display: block; }
+
+    .bubble {
+      position: absolute;
+      background: rgba(255,255,255,0.08);
+      border: 2px solid #2d4266;
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .bubble strong { color: var(--ink); }
+    .bubble.ai-result {
+      right: 26px;
+      top: calc(56% + 88px);
+      left: auto;
+    }
+
+    .ai-arrow {
+      position: absolute;
+      right: 86px;
+      top: calc(56% + 60px);
+      width: 0;
+      height: 36px;
+      border-left: 2px solid rgba(255, 255, 255, 0.8);
+      display: none;
+    }
+    .ai-arrow:after {
+      content: "";
+      position: absolute;
+      left: -4px;
+      bottom: -6px;
+      border-top: 6px solid rgba(255, 255, 255, 0.8);
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+    }
+    .ai-arrow.active { display: block; }
+
+    .path {
+      position: absolute;
+      border-top: 3px dashed var(--teal);
+      opacity: 0.9;
+      transform-origin: 0 50%;
+    }
+
+    .truck {
+      position: absolute;
+      width: 40px;
+      height: 22px;
+      background: #ef476f;
+      border: 3px solid #f7a1b4;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #1b1b1b;
+    }
+    .truck:before, .truck:after {
+      content: "";
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background: #1b1b1b;
+      border-radius: 50%;
+      bottom: -6px;
+    }
+    .truck:before { left: 6px; }
+    .truck:after { right: 6px; }
+
+    .toast {
+      position: absolute;
+      right: 18px;
+      top: 70px;
+      background: #fff1c1;
+      color: #1b1b1b;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 2px solid #f4b66b;
+      display: none;
+    }
+    .toast.active { display: block; }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .legend .i::before { background: var(--danger); }
+    .legend .s::before { background: #e0e1dd; border: 1px solid #3a4a64; }
+    .legend .t::before { background: #ef476f; }
+    .legend .p::before { background: #ffd166; border: 1px solid #b07b00; }
+
+    .fade { animation: fadeIn 0.5s ease both; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI Disaster Response — Interactive 2D Flow</h1>
+    <div class="badge">Hackathon Demo</div>
+  </header>
+
+  <main class="stage">
+    <section class="canvas">
+      <div class="scene-title" id="sceneTitle">Step 1: Disaster Happens</div>
+      <div class="map">
+        <div class="city"></div>
+        <div class="grid"></div>
+
+        <div class="incident" id="incident"></div>
+        <div class="radius" id="radius"></div>
+
+        <div class="station chief" id="stationChief"><span>Chief</span></div>
+        <div class="station s2" id="station2"></div>
+        <div class="station s3" id="station3"></div>
+
+        <div class="people p1" id="person1"></div>
+        <div class="people p2" id="person2"></div>
+        <div class="people p3" id="person3"></div>
+        <div class="people p4" id="personGmail"></div>
+
+        <div class="send-line" id="send1"></div>
+        <div class="send-line" id="send2"></div>
+        <div class="send-line" id="send3"></div>
+        <div class="route-line vert" id="routeLineV"></div>
+        <div class="route-line" id="routeLineH"></div>
+        <div class="ambulance" id="ambulance">+</div>
+
+        <div class="path hidden" id="path1"></div>
+        <div class="path hidden" id="path2"></div>
+        <div class="path hidden" id="path3"></div>
+
+        <div class="truck hidden" id="truck1">5</div>
+        <div class="truck hidden" id="truck2">2</div>
+
+        <div class="bubble" id="bubbleInputs" style="left: 40px; top: 90px; display:none;">
+          <strong>Feedback:</strong> location, photos, audio, affected count
+        </div>
+        <div class="bubble ai-result" id="bubbleAI" style="display:none;">
+          <strong>AI:</strong> severity = HIGH
+        </div>
+        <div class="ai-arrow" id="aiArrow"></div>
+        <div class="bubble" id="bubbleCSV" style="left: 50%; top: 18%; display:none;">
+          <strong>Need:</strong> 5 ambulances + 3 fire trucks
+        </div>
+        <div class="bubble" id="bubbleNeed" style="left: 20%; top: 40%; display:none;">
+          <strong>Update:</strong> 2 fire trucks needed
+        </div>
+        <div class="bubble" id="bubbleWhats" style="left: 56%; top: 8%; display:none;">
+          <strong>Gmail:</strong> safety rules + shelters
+        </div>
+
+        <div class="ai" id="aiBox">AI Severity
+          Engine</div>
+        <div class="filter" id="filterTag">Filtering &amp; Radius Check</div>
+
+        <div class="toast" id="toast">Dispatch updated in real time</div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div>
+        <h2>Flow Steps</h2>
+        <div class="legend">
+          <span class="i">Incident</span>
+          <span class="p">People</span>
+          <span class="s">Stations</span>
+          <span class="t">Trucks</span>
+        </div>
+      </div>
+      <div class="steps" id="steps">
+        <div class="step active">1. Disaster happens</div>
+        <div class="step">2. Nearby users send feedback: audio, images, location, affected count</div>
+        <div class="step">3. AI filters data and scores severity</div>
+        <div class="step">4. Radius check selects nearest chief station</div>
+        <div class="step">5. Need 5 ambulances and 3 fire trucks</div>
+        <div class="step">6. Chief station sends 5 trucks</div>
+        <div class="step">7. System updates: 5 still needed</div>
+        <div class="step">8. Other stations send remaining 2 fire trucks</div>
+        <div class="step">9. Gmail safety alerts to citizens</div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="controls">
+    <button id="prev">Prev</button>
+    <button id="next">Next</button>
+    <button class="secondary" id="reset">Reset</button>
+    <span style="margin-left: auto; color: var(--muted); font-size: 12px;">Use arrow keys or buttons</span>
+  </div>
+</div>
+
+<script>
+  const steps = [...document.querySelectorAll('.step')];
+  const sceneTitle = document.getElementById('sceneTitle');
+
+  const bubbleInputs = document.getElementById('bubbleInputs');
+  const bubbleAI = document.getElementById('bubbleAI');
+  const bubbleCSV = document.getElementById('bubbleCSV');
+  const bubbleNeed = document.getElementById('bubbleNeed');
+  const bubbleWhats = document.getElementById('bubbleWhats');
+
+  const path1 = document.getElementById('path1');
+  const path2 = document.getElementById('path2');
+  const path3 = document.getElementById('path3');
+  const truck1 = document.getElementById('truck1');
+  const truck2 = document.getElementById('truck2');
+
+  const radius = document.getElementById('radius');
+  const filterTag = document.getElementById('filterTag');
+  const send1 = document.getElementById('send1');
+  const send2 = document.getElementById('send2');
+  const send3 = document.getElementById('send3');
+  const routeLineV = document.getElementById('routeLineV');
+  const routeLineH = document.getElementById('routeLineH');
+  const ambulance = document.getElementById('ambulance');
+  const stationChief = document.getElementById('stationChief');
+  const station2 = document.getElementById('station2');
+  const toast = document.getElementById('toast');
+  const aiArrow = document.getElementById('aiArrow');
+  const person1 = document.getElementById('person1');
+  const person2 = document.getElementById('person2');
+  const person3 = document.getElementById('person3');
+  const personGmail = document.getElementById('personGmail');
+
+  let idx = 0;
+
+  const titles = [
+    'Step 1: Disaster Happens',
+    'Step 2: Nearby Users Send Feedback',
+    'Step 3: AI Filters & Scores Severity',
+    'Step 4: Radius Check Picks Chief Station',
+    'Step 5: Need 5 Ambulances & 3 Fire Trucks',
+    'Step 6: Chief Station Sends 5 Trucks',
+    'Step 7: System Updates Remaining Need',
+    'Step 8: Other Stations Send 5 Trucks',
+    'Step 9: Gmail Safety Alerts'
+  ];
+
+  function clearScene() {
+    [bubbleInputs, bubbleAI, bubbleCSV, bubbleNeed, bubbleWhats].forEach(el => el.style.display = 'none');
+    [path1, path2, path3, truck1, truck2].forEach(el => el.classList.add('hidden'));
+    [send1, send2, send3].forEach(el => el.classList.remove('active'));
+    radius.classList.remove('active');
+    filterTag.classList.remove('active');
+    stationChief.classList.remove('active');
+    stationChief.classList.remove('in-radius');
+    station2.classList.remove('in-radius');
+    toast.classList.remove('active');
+    aiArrow.classList.remove('active');
+    routeLineV.classList.remove('active');
+    routeLineH.classList.remove('active');
+    ambulance.classList.remove('active');
+    personGmail.style.display = 'none';
+  }
+
+  function setPaths() {
+    path1.style.left = '34%';
+    path1.style.top = '36%';
+    path1.style.width = '30%';
+    path1.style.transform = 'rotate(0deg)';
+
+    // Step 7: horizontal then slight up (L-shape)
+    path2.style.left = '34%';
+    path2.style.top = '62%';
+    path2.style.width = '16%';
+    path2.style.transform = 'rotate(0deg)';
+
+    path3.style.left = '50%';
+    path3.style.top = '62%';
+    path3.style.width = '8%';
+    path3.style.transform = 'rotate(-90deg)';
+  }
+
+  function setSendLines() {
+    // All lines converge on the AI box (same direction to one target)
+    send1.style.left = '59%';
+    send1.style.top = '45%';
+    send1.style.width = '34%';
+    send1.style.transform = 'rotate(20deg)';
+
+    send2.style.left = '63%';
+    send2.style.top = '55%';
+    send2.style.width = '28%';
+    send2.style.transform = 'rotate(8deg)';
+
+    send3.style.left = '46%';
+    send3.style.top = '60%';
+    send3.style.width = '45%';
+    send3.style.transform = 'rotate(0deg)';
+  }
+
+  function setRouteLine() {
+    // Vertical down from chief, then right to the incident center
+    routeLineV.style.left = '46%';
+    routeLineV.style.top = '41%';
+    routeLineV.style.height = '46px';
+
+    routeLineH.style.left = '46%';
+    routeLineH.style.top = '49%';
+    routeLineH.style.width = '7%';
+
+    ambulance.style.left = '48%';
+    ambulance.style.top = '48%';
+    ambulance.style.transform = 'rotate(0deg)';
+  }
+
+  function moveTruck(truck, x, y) {
+    truck.style.left = x;
+    truck.style.top = y;
+    truck.classList.remove('hidden');
+    truck.classList.add('fade');
+  }
+
+  function render() {
+    steps.forEach((s, i) => s.classList.toggle('active', i === idx));
+    sceneTitle.textContent = titles[idx];
+    clearScene();
+    setPaths();
+    setSendLines();
+    setRouteLine();
+
+    if (idx >= 1) {
+      bubbleInputs.style.display = 'block';
+      bubbleInputs.classList.add('fade');
+      if (idx === 1) {
+        [send1, send2, send3].forEach(el => el.classList.add('active'));
+      }
+    }
+    if (idx <= 3) {
+      [person1, person2, person3].forEach(el => el.style.display = 'block');
+    } else {
+      [person1, person2, person3].forEach(el => el.style.display = 'none');
+    }
+    if (idx >= 2) {
+      bubbleAI.style.display = 'block';
+      bubbleAI.classList.add('fade');
+      filterTag.classList.add('active');
+      aiArrow.classList.add('active');
+    }
+    if (idx >= 3) {
+      radius.classList.add('active');
+      stationChief.classList.add('active');
+      stationChief.classList.add('in-radius');
+      station2.classList.add('in-radius');
+    }
+    if (idx >= 4) {
+      bubbleCSV.style.display = 'block';
+      bubbleCSV.classList.add('fade');
+    }
+    if (idx === 5) {
+      routeLineV.classList.add('active');
+      routeLineH.classList.add('active');
+      ambulance.classList.add('active');
+    }
+    if (idx >= 6) {
+      path1.classList.add('hidden');
+      truck1.classList.add('hidden');
+      bubbleNeed.style.display = 'block';
+      bubbleNeed.classList.add('fade');
+      toast.classList.remove('active');
+    }
+    if (idx >= 7) {
+      path2.classList.remove('hidden');
+      path3.classList.remove('hidden');
+      moveTruck(truck2, '34%', '60%');
+    }
+    if (idx >= 8) {
+      bubbleWhats.style.display = 'block';
+      bubbleWhats.classList.add('fade');
+      personGmail.style.display = 'block';
+    }
+  }
+
+  document.getElementById('next').addEventListener('click', () => {
+    idx = Math.min(idx + 1, steps.length - 1);
+    render();
+  });
+  document.getElementById('prev').addEventListener('click', () => {
+    idx = Math.max(idx - 1, 0);
+    render();
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    idx = 0;
+    render();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { idx = Math.min(idx + 1, steps.length - 1); render(); }
+    if (e.key === 'ArrowLeft') { idx = Math.max(idx - 1, 0); render(); }
+  });
+
+  render();
+</script>
+</body>
+</html>

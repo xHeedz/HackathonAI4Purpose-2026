@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Emergency Dispatch Dashboard</title>
+  <style>
+    :root {
+      --bg-1: #0f172a;
+      --bg-2: #1e293b;
+      --card: #0b1220;
+      --card-2: #0f172a;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #10b981;
+      --accent-2: #22d3ee;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --line: rgba(148, 163, 184, 0.2);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", sans-serif;
+      background: radial-gradient(1200px 600px at 10% 10%, #1e293b 0%, #0f172a 55%, #0b1020 100%);
+      color: var(--text);
+      margin: 0;
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 6px 0;
+      font-size: 28px;
+      letter-spacing: 0.4px;
+    }
+    .status { font-weight: 700; }
+    .row { display: flex; flex-wrap: wrap; gap: 20px; }
+    .card {
+      background: linear-gradient(180deg, var(--card-2), var(--card));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      min-width: 360px;
+      flex: 1 1 420px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      letter-spacing: 0.4px;
+      color: #cbd5f5;
+    }
+    label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+    input, select, button {
+      width: 100%;
+      padding: 9px 12px;
+      margin-top: 6px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #0b1220;
+      color: var(--text);
+    }
+    button {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      color: #001014;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      margin-top: 12px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,185,129,0.35); }
+    button.secondary { background: #1f2937; color: #e5e7eb; }
+    button.warn { background: linear-gradient(90deg, #ef4444, #f97316); color: #0b0f14; }
+    .big { font-size: 30px; font-weight: 800; }
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(34,211,238,0.12);
+      border: 1px solid rgba(34,211,238,0.25);
+      color: #67e8f9;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td {
+      padding: 8px 6px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      font-size: 13px;
+    }
+    tr:hover { background: rgba(148, 163, 184, 0.08); }
+    pre {
+      background: #0b1020;
+      color: #c7f9cc;
+      padding: 10px;
+      border-radius: 10px;
+      overflow: auto;
+      border: 1px solid var(--line);
+    }
+    .muted { color: var(--muted); }
+    .live-table { max-height: 240px; overflow: auto; }
+    #map {
+      height: 420px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+    .map-icon {
+      font-size: 18px;
+      line-height: 18px;
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
+    }
+    .map-icon.hospital {
+      color: #ef4444;
+      text-shadow: 0 0 8px rgba(239, 68, 68, 0.9);
+    }
+    .map-icon.fire {
+      color: #f97316;
+      text-shadow: 0 0 8px rgba(249, 115, 22, 0.9);
+    }
+    .map-icon.incident {
+      color: #facc15;
+      text-shadow: 0 0 8px rgba(250, 204, 21, 0.9);
+    }
+  </style>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+</head>
+<body>
+  <h1>Emergency Dispatch Dashboard</h1>
+  <div class="status">Backend: <span id="backendStatus" class="pill">checking...</span></div>
+
+  <div class="row" style="margin-top: 16px;">
+    <div class="card">
+      <h2>Incidents</h2>
+      <label>Current Incident</label>
+      <select id="incidentSelect"></select>
+      <button class="secondary" onclick="refreshAll()">Refresh Now</button>
+
+      <h3 style="margin-top: 18px;">Create Incident</h3>
+      <label>incidentId</label>
+      <input id="newIncidentId" placeholder="INC1" />
+      <label>eventType</label>
+      <select id="eventType">
+        <option>FIRE</option>
+        <option>BOMBING</option>
+        <option>FLOOD</option>
+        <option>EARTHQUAKE</option>
+        <option>OTHER</option>
+      </select>
+      <label>latitude</label>
+      <input id="lat" placeholder="33.8938" />
+      <label>longitude</label>
+      <input id="lon" placeholder="35.5018" />
+      <label>severity (0-100)</label>
+      <input id="severity" placeholder="80" />
+      <button onclick="createIncident()">Create Incident</button>
+
+      <h3 style="margin-top: 18px;">Upload Incidents (CSV)</h3>
+      <label>CSV file (headers: incidentId,eventType,latitude,longitude,severity)</label>
+      <input id="csvFile" type="file" accept=".csv" />
+      <button onclick="uploadCsv()">Upload CSV</button>
+    </div>
+
+    <div class="card">
+      <h2>Live Needs</h2>
+      <div>Ambulances needed</div>
+      <div id="needA" class="big">-</div>
+      <div>Fire trucks needed</div>
+      <div id="needF" class="big">-</div>
+      <div>Radius (km)</div>
+      <div id="radius" class="big">-</div>
+      <div style="margin-top: 10px;">Chief Hospital (closest)</div>
+      <div id="chiefHospital" class="pill">-</div>
+      <div style="margin-top: 10px;">Chief Fire Station (closest)</div>
+      <div id="chiefFireStation" class="pill">-</div>
+
+      <h3 style="margin-top: 18px;">Chief Override</h3>
+      <label>needAmbulances</label>
+      <input id="setNeedA" placeholder="6" />
+      <label>needFireTrucks</label>
+      <input id="setNeedF" placeholder="10" />
+      <button class="warn" onclick="updateNeeds()">Update Needs</button>
+
+      <h3 style="margin-top: 18px;">Dispatch From Station</h3>
+      <label>stationId</label>
+      <input id="dispatchStationId" placeholder="ST01" />
+      <label>ambulances</label>
+      <input id="dispatchStationAmb" placeholder="2" />
+      <label>fire trucks</label>
+      <input id="dispatchStationFire" placeholder="1" />
+      <button onclick="dispatchFromStation()">Dispatch From Station</button>
+    </div>
+
+    <div class="card">
+      <h2>Resources</h2>
+      <button class="secondary" onclick="loadResources()">Load Resources</button>
+      <div id="resourcesInfo" class="muted live-table">No data yet</div>
+
+      <h3 style="margin-top: 18px;">Bulk Register Resources</h3>
+      <label>stationId</label>
+      <input id="bulkStationId" placeholder="ST01" />
+      <label>type</label>
+      <select id="bulkType">
+        <option value="FIRE_TRUCK">FIRE_TRUCK</option>
+        <option value="AMBULANCE">AMBULANCE</option>
+      </select>
+      <label>count</label>
+      <input id="bulkCount" placeholder="5" />
+      <label>latitude</label>
+      <input id="bulkLat" placeholder="33.900" />
+      <label>longitude</label>
+      <input id="bulkLon" placeholder="35.520" />
+      <button onclick="bulkAdd()">Bulk Add</button>
+
+      <h3 style="margin-top: 18px;">Incident Groups (1 km)</h3>
+      <div id="incidentGroups" class="muted live-table">No data yet</div>
+      <button class="secondary" onclick="loadIncidentGroups()">Refresh Groups</button>
+      <div id="groupDetails" class="muted live-table" style="margin-top: 10px;">-</div>
+    </div>
+
+  </div>
+
+  <div class="row" style="margin-top: 16px;">
+    <div class="card" style="flex: 1 1 100%;">
+      <h2>Dispatch Feed</h2>
+      <div id="dispatchFeed" class="muted live-table">No data yet</div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top: 16px;">
+    <div class="card" style="flex: 1 1 100%;">
+      <h2>Stations Notified (Within Radius)</h2>
+      <div id="notifiedStations" class="muted live-table">No data yet</div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top: 16px;">
+    <div class="card" style="flex: 1 1 100%;">
+      <h2>Lebanon Map (Dispatch Simulation)</h2>
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <h2 style="margin-top: 18px;">Debug Output</h2>
+  <pre id="log"></pre>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    let map = null;
+    let stationMarkers = {};
+    let incidentMarkers = {};
+    let knownDispatches = new Set();
+
+    function initMap() {
+      map = L.map("map", {
+        zoomControl: true,
+      }).setView([33.8938, 35.5018], 7.5);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+
+      // Lebanon bounds (rough)
+      const lebanonBounds = L.latLngBounds(
+        [33.0, 35.0],
+        [34.7, 36.7]
+      );
+      map.setMaxBounds(lebanonBounds);
+      map.fitBounds(lebanonBounds);
+    }
+    function log(msg) {
+      const el = document.getElementById("log");
+      el.textContent = new Date().toLocaleTimeString() + "  " + msg + "\n" + el.textContent;
+    }
+
+    async function pingBackend() {
+      try {
+        const r = await fetch("/incidents");
+        if (!r.ok) throw new Error("not ok");
+        document.getElementById("backendStatus").textContent = "ONLINE";
+        document.getElementById("backendStatus").className = "pill";
+      } catch (e) {
+        document.getElementById("backendStatus").textContent = "OFFLINE (start uvicorn)";
+        document.getElementById("backendStatus").className = "pill";
+      }
+    }
+
+    let currentIncidentId = null;
+
+    function getSelectedIncidentId() {
+      return currentIncidentId || document.getElementById("incidentSelect").value;
+    }
+
+    function setCurrentIncident(id) {
+      currentIncidentId = id;
+      const sel = document.getElementById("incidentSelect");
+      sel.value = id;
+    }
+
+    async function loadIncidents() {
+      const sel = document.getElementById("incidentSelect");
+      sel.innerHTML = "";
+      const r = await fetch("/incidents");
+      const incidents = await r.json();
+      const prev = currentIncidentId;
+      incidents.forEach(inc => {
+        const opt = document.createElement("option");
+        opt.value = inc.incidentId;
+        opt.textContent = `${inc.incidentId} (${inc.eventType})`;
+        sel.appendChild(opt);
+      });
+      if (prev) {
+        setCurrentIncident(prev);
+      } else if (incidents.length) {
+        setCurrentIncident(incidents[0].incidentId);
+      }
+    }
+
+    async function loadIncidentDetails() {
+      const id = getSelectedIncidentId();
+      if (!id) return;
+      const r = await fetch(`/incidents/${id}`);
+      const inc = await r.json();
+
+      document.getElementById("needA").textContent = inc.needAmbulances;
+      document.getElementById("needF").textContent = inc.needFireTrucks;
+      document.getElementById("radius").textContent = inc.radiusKm;
+      if (inc.chiefHospital) {
+        document.getElementById("chiefHospital").textContent =
+          `${inc.chiefHospital.name} (${inc.chiefHospital.distanceKm} km)`;
+      } else {
+        document.getElementById("chiefHospital").textContent = "-";
+      }
+      if (inc.chiefFireStation) {
+        document.getElementById("chiefFireStation").textContent =
+          `${inc.chiefFireStation.name} (${inc.chiefFireStation.distanceKm} km)`;
+      } else {
+        document.getElementById("chiefFireStation").textContent = "-";
+      }
+
+      // Removed: "Resources Sent So Far" table (dispatch feed already shows this)
+    }
+
+    async function loadIncidentGroups() {
+      const r = await fetch("/incidents/groups?distanceKm=1");
+      const groups = await r.json();
+
+      if (!groups.length) {
+        document.getElementById("incidentGroups").textContent = "No incidents yet";
+        document.getElementById("groupDetails").textContent = "-";
+        return;
+      }
+
+      let html = "<table><tr><th>Type</th><th>Count</th><th>Incident IDs</th><th>Center</th></tr>";
+      groups.forEach(g => {
+        html += `<tr><td>${g.eventType}</td><td>${g.incidentIds.length}</td><td>${g.incidentIds.join(", ")}</td><td>${g.center.latitude.toFixed(4)}, ${g.center.longitude.toFixed(4)}</td></tr>`;
+      });
+      html += "</table>";
+      document.getElementById("incidentGroups").innerHTML = html;
+
+      // Build group detail list with quick-select buttons
+      let detailHtml = "";
+      groups.forEach(g => {
+        detailHtml += `<div style="margin:8px 0;"><span class="pill">${g.eventType}</span> `;
+        g.incidentIds.forEach(id => {
+          detailHtml += `<button class="secondary" style="width:auto; margin:4px;" onclick="selectIncident('${id}')">${id}</button>`;
+        });
+        detailHtml += "</div>";
+      });
+      document.getElementById("groupDetails").innerHTML = detailHtml;
+    }
+
+    function selectIncident(id) {
+      setCurrentIncident(id);
+      refreshAll();
+    }
+
+    async function loadStations() {
+      const r = await fetch("/stations");
+      const stations = await r.json();
+      const byId = {};
+      stations.forEach(s => {
+        byId[s.stationId] = s;
+        if (!stationMarkers[s.stationId]) {
+          const iconHtml = s.stationType === "FIRE"
+            ? '<span class="map-icon fire">🚒</span>'
+            : '<span class="map-icon hospital">✚</span>';
+          const marker = L.marker([s.latitude, s.longitude], {
+            icon: L.divIcon({
+              className: "station-icon",
+              html: `<div>${iconHtml}</div>`,
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            }),
+          }).addTo(map);
+          marker.bindPopup(`${s.name} (${s.stationType})`);
+          stationMarkers[s.stationId] = marker;
+        }
+      });
+      return byId;
+    }
+
+    async function loadIncidentsForMap() {
+      const r = await fetch("/incidents");
+      const incidents = await r.json();
+      const byId = {};
+      incidents.forEach(inc => {
+        byId[inc.incidentId] = inc;
+        if (!incidentMarkers[inc.incidentId]) {
+          const marker = L.marker([inc.latitude, inc.longitude], {
+            icon: L.divIcon({
+              className: "incident-icon",
+              html: `<div><span class="map-icon incident">⚠️</span></div>`,
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            }),
+          }).addTo(map);
+          marker.bindPopup(`${inc.incidentId} (${inc.eventType})`);
+          incidentMarkers[inc.incidentId] = marker;
+        } else {
+          incidentMarkers[inc.incidentId].setLatLng([inc.latitude, inc.longitude]);
+        }
+      });
+      return byId;
+    }
+
+    function haversineKm(a, b) {
+      const toRad = (x) => (x * Math.PI) / 180;
+      const R = 6371;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h = Math.sin(dLat / 2) ** 2 +
+                Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    function buildCumulativeDistances(path) {
+      const cum = [0];
+      for (let i = 1; i < path.length; i++) {
+        const d = haversineKm(path[i - 1], path[i]);
+        cum.push(cum[i - 1] + d);
+      }
+      return cum;
+    }
+
+    function interpolateAlongPath(path, cum, distKm) {
+      for (let i = 1; i < cum.length; i++) {
+        if (distKm <= cum[i]) {
+          const segDist = cum[i] - cum[i - 1];
+          const t = segDist === 0 ? 0 : (distKm - cum[i - 1]) / segDist;
+          const lat = path[i - 1].lat + (path[i].lat - path[i - 1].lat) * t;
+          const lng = path[i - 1].lng + (path[i].lng - path[i - 1].lng) * t;
+          return L.latLng(lat, lng);
+        }
+      }
+      return path[path.length - 1];
+    }
+
+    function animateDispatchLine(pathLatLngs, durationMs, color, type, units) {
+      const path = L.polyline(pathLatLngs, { color, weight: 3, opacity: 0.85 }).addTo(map);
+      const iconHtml = type === "FIRE_TRUCK" ? "🚒" : "🚑";
+      const marker = L.marker(pathLatLngs[0], {
+        icon: L.divIcon({
+          className: "dispatch-icon",
+          html: `<div style="font-size:20px; line-height:20px;">${iconHtml}</div>`,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
+        }),
+      }).addTo(map);
+      const totalMin = Math.max(1, Math.round(durationMs / 60000));
+      const unitText = units && units > 1 ? ` · ${units} units` : " · 1 unit";
+      marker.bindTooltip(`${totalMin} min`, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -8],
+        opacity: 0.9,
+      });
+
+      const cum = buildCumulativeDistances(pathLatLngs);
+      const totalKm = cum[cum.length - 1];
+      const startTime = performance.now();
+      function step(now) {
+        const t = Math.min(1, (now - startTime) / durationMs);
+        const dist = totalKm * t;
+        const pos = interpolateAlongPath(pathLatLngs, cum, dist);
+        marker.setLatLng(pos);
+        const remaining = Math.max(0, Math.ceil((1 - t) * totalMin));
+        marker.setTooltipContent(`${remaining} min${unitText}`);
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          setTimeout(() => {
+            map.removeLayer(marker);
+            map.removeLayer(path);
+          }, 2000);
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    async function animateNewDispatches(events) {
+      const stationsById = await loadStations();
+      const incidentsById = await loadIncidentsForMap();
+
+      events.forEach(e => {
+        const key = `${e.resourceId}-${e.dispatchedAt}-${e.units || 1}`;
+        if (knownDispatches.has(key)) return;
+        knownDispatches.add(key);
+
+        const station = stationsById[e.stationId];
+        const incident = incidentsById[e.incidentId];
+        if (!station || !incident) return;
+
+        const start = L.latLng(station.latitude, station.longitude);
+        const end = L.latLng(incident.latitude, incident.longitude);
+        const durationMs = Math.max(5000, (e.etaMinutes || 5) * 60 * 1000);
+        const color = e.type === "FIRE_TRUCK" ? "#f97316" : "#22d3ee";
+
+        fetch(`/route?fromLat=${start.lat}&fromLon=${start.lng}&toLat=${end.lat}&toLon=${end.lng}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(route => {
+            if (route && route.coordinates && route.coordinates.length > 1) {
+              const path = route.coordinates.map(c => L.latLng(c[0], c[1]));
+              const dur = Math.max(5000, (route.durationMin || e.etaMinutes || 5) * 60 * 1000);
+              animateDispatchLine(path, dur, color, e.type, e.units || 1);
+            } else {
+              animateDispatchLine([start, end], durationMs, color, e.type, e.units || 1);
+            }
+          })
+          .catch(() => {
+            animateDispatchLine([start, end], durationMs, color, e.type, e.units || 1);
+          });
+      });
+    }
+
+    async function loadNotifiedStations() {
+      const id = getSelectedIncidentId();
+      if (!id) return;
+
+      const r = await fetch(`/incidents/${id}/notifications`);
+      const stations = await r.json();
+
+      if (!stations.length) {
+        document.getElementById("notifiedStations").textContent = "No stations within radius";
+        return;
+      }
+
+      let html = "<table><tr><th>Station</th><th>Type</th><th>Distance (km)</th><th>ETA (min)</th><th>Phone</th><th>Email</th><th>Note</th></tr>";
+      stations.forEach(s => {
+        const note = s.fallback ? "Closest (fallback)" : "";
+        html += `<tr><td>${s.name}</td><td>${s.stationType || "-"}</td><td>${s.distanceKm}</td><td>${s.etaMinutes}</td><td>${s.phone}</td><td>${s.email}</td><td>${note}</td></tr>`;
+      });
+      html += "</table>";
+      document.getElementById("notifiedStations").innerHTML = html;
+    }
+
+    async function loadDispatchFeed() {
+      const r = await fetch("/dispatch/events");
+      const events = await r.json();
+
+      if (!events.length) {
+        document.getElementById("dispatchFeed").textContent = "No dispatches yet";
+        return;
+      }
+
+      let html = "<table><tr><th>Time</th><th>Station</th><th>Type</th><th>Units</th><th>Resource</th><th>Incident</th><th>ETA</th><th>Distance</th></tr>";
+      events.slice().reverse().forEach(e => {
+        const t = new Date(e.dispatchedAt).toLocaleTimeString();
+        const units = e.units || 1;
+        html += `<tr><td>${t}</td><td>${e.stationId}</td><td>${e.type}</td><td>${units}</td><td>${e.resourceId}</td><td>${e.incidentId}</td><td>${e.etaMinutes}</td><td>${e.distanceKm}</td></tr>`;
+      });
+      html += "</table>";
+      document.getElementById("dispatchFeed").innerHTML = html;
+      if (map) {
+        animateNewDispatches(events);
+      }
+    }
+
+    async function createIncident() {
+      const payload = {
+        incidentId: document.getElementById("newIncidentId").value.trim(),
+        eventType: document.getElementById("eventType").value,
+        lat: parseFloat(document.getElementById("lat").value),
+        lon: parseFloat(document.getElementById("lon").value),
+        severity: parseFloat(document.getElementById("severity").value)
+      };
+
+      const r = await fetch("/incidents/create", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      log("Create incident: " + JSON.stringify(j));
+      await loadIncidents();
+      document.getElementById("incidentSelect").value = payload.incidentId;
+      await refreshAll();
+    }
+
+    async function uploadCsv() {
+      const input = document.getElementById("csvFile");
+      if (!input.files || input.files.length === 0) {
+        return alert("Choose a CSV file first.");
+      }
+
+      const formData = new FormData();
+      formData.append("file", input.files[0]);
+
+      const r = await fetch("/incidents/uploadCsv", {
+        method: "POST",
+        body: formData
+      });
+      const j = await r.json();
+      log("Upload CSV: " + JSON.stringify(j));
+      await loadIncidents();
+      await refreshAll();
+    }
+
+    async function updateNeeds() {
+      const id = getSelectedIncidentId();
+      if (!id) return alert("Select an incident first.");
+
+      const payload = {
+        needAmbulances: parseInt(document.getElementById("setNeedA").value),
+        needFireTrucks: parseInt(document.getElementById("setNeedF").value)
+      };
+
+      const r = await fetch(`/incidents/${id}/updateNeeds`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      log("Update needs: " + JSON.stringify(j));
+      await refreshAll();
+    }
+
+    async function bulkAdd() {
+      const payload = {
+        stationId: document.getElementById("bulkStationId").value.trim(),
+        type: document.getElementById("bulkType").value,
+        count: parseInt(document.getElementById("bulkCount").value),
+        lat: parseFloat(document.getElementById("bulkLat").value),
+        lon: parseFloat(document.getElementById("bulkLon").value)
+      };
+
+      const r = await fetch("/resources/bulkAdd", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      log("Bulk add: " + JSON.stringify(j));
+      await loadResources();
+    }
+
+    async function loadResources() {
+      const r = await fetch("/resources");
+      const list = await r.json();
+
+      let html = "<table><tr><th>ID</th><th>Type</th><th>Status</th><th>Station</th><th>Dispatched</th><th>ETA (min)</th><th>Dist (km)</th></tr>";
+      list.forEach(x => {
+        const dAt = x.dispatchedAt ? new Date(x.dispatchedAt).toLocaleTimeString() : "-";
+        const eta = x.etaMinutes !== undefined ? x.etaMinutes : "-";
+        const dist = x.distanceKmToIncident !== undefined ? x.distanceKmToIncident : "-";
+        html += `<tr><td>${x.resourceId}</td><td>${x.type}</td><td>${x.status}</td><td>${x.stationId}</td><td>${dAt}</td><td>${eta}</td><td>${dist}</td></tr>`;
+      });
+      html += "</table>";
+      document.getElementById("resourcesInfo").innerHTML = html;
+    }
+
+    async function dispatchFromStation() {
+      const id = getSelectedIncidentId();
+      if (!id) return alert("Select an incident first.");
+
+      const payload = {
+        stationId: document.getElementById("dispatchStationId").value.trim(),
+        ambulances: parseInt(document.getElementById("dispatchStationAmb").value) || 0,
+        fireTrucks: parseInt(document.getElementById("dispatchStationFire").value) || 0
+      };
+
+      const r = await fetch(`/incidents/${id}/dispatchFromStation`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      log("Dispatch from station: " + JSON.stringify(j));
+      await refreshAll();
+      await loadResources();
+    }
+
+    async function refreshAll() {
+      await pingBackend();
+      await loadIncidentDetails();
+      await loadIncidentGroups();
+      await loadNotifiedStations();
+      await loadDispatchFeed();
+    }
+
+    async function boot() {
+      initMap();
+      await pingBackend();
+      await loadIncidents();
+      await refreshAll();
+      await loadResources();
+      document.getElementById("incidentSelect").addEventListener("change", (e) => {
+        setCurrentIncident(e.target.value);
+        refreshAll();
+      });
+      setInterval(refreshAll, 2000);
+    }
+
+    boot();
+  </script>
+</body>
+</html>
